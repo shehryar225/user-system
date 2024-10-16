@@ -18,14 +18,16 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+     "seed": "ts-node -r tsconfig-paths/register ./src/database/seeders/seed.ts",
     "typeorm": "ts-node --require tsconfig-paths/register ./node_modules/typeorm/cli",
-    "migration:run": "npm run typeorm migration:run -- -d ./src/database/ormConfig.ts",
-    "migration:generate": "npm run typeorm -- -d ./src/config/ormConfig.ts migration:generate ./src/database/migrations/",
-    "migration:create": "npm run typeorm -- migration:create ./src/database/migrations/$npm_config_name",
-    "migration:revert": "npm run typeorm -- -d ./src/database/ormConfig migration:revert",
-    "migration:show": "npm run typeorm -- migration:show -d ./db/ormConfig"
+    "migration:run": "npm run typeorm migration:run -- -d ./src/config/ormConfig.ts",
+    "migration:generate": "npm run typeorm -- -d ./src/config/ormConfig.ts migration:generate ./src/database/migrations/%npm_config_name%",
+    "migration:create": "npm run typeorm -- migration:create ./db/migrations/$npm_config_name",
+    "migration:revert": "npm run typeorm -- -d ./src/config/ormConfig.ts migration:revert",
+    "migration:show": "npm run typeorm -- migration:show -d ./src/config/ormConfig.ts"
   },
   "dependencies": {
+    "@faker-js/faker": "^8.4.1",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.2.3",
     "@nestjs/core": "^10.0.0",
@@ -45,6 +47,7 @@
     "pg": "^8.13.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
+    "typeorm-extension": "^3.6.2",
     "uuid": "^10.0.0"
   },
   "devDependencies": {
