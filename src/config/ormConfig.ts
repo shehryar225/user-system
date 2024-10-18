@@ -23,3 +23,5 @@ export const dbConfig = ():DataSourceOptions => {
   logging:false
 }
 }
+
+export const AppDataSource = new DataSource(dbConfig());

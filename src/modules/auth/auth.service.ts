@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { userServices } from '../user/user.service';
 import { v4 as uuidv4 } from 'uuid';
@@ -7,10 +7,18 @@ import { User } from '../user/entities/user.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { loginDto, registrationDto, restPasswordDto } from './dto/auth.dto';
+import { Request } from 'express';
+import { OAuth2Client } from 'google-auth-library';
+import { AccountType } from 'src/enums/accountType.enum';
 @Injectable()
 export class AuthService {
-  constructor(@InjectRepository(User) private userRepository:Repository <User>,
-    private jwtService: JwtService) {}
+
+    private client: OAuth2Client;
+
+    constructor(@InjectRepository(User) private userRepository:Repository <User>,
+    private jwtService: JwtService) {
+        this.client = new OAuth2Client(process.env.CLIENT_ID);
+    }
 
 //   async validateUser(username: string, password: string): Promise<User | null> {
 //     const user = await this.userService.findByUsername(username);
@@ -26,15 +34,23 @@ async register(createUserDto: registrationDto): Promise<any> {
     
     try{
         const {userName,email}=createUserDto    
-        
-        console.log(newUser)
+
+        if (newUser.accountType === AccountType.GOOGLE) {
+            delete newUser.password;
+          }
+        else{
+              newUser.accountType=AccountType.SIMPLE  
+          }
+
+          console.log("-------------------",newUser)
+
         const user= await this.userRepository.save(newUser)
         
         //Generate the Email Verification Token from jwt token
         const jwt=this.generateTempToken({id:user.id,type:"temporary",expiresIn:'5m'})
 
         return {
-            message:`Registration Successfully Please verify your account http://localhost:3000/auth/verifyemail/${jwt}`,
+            message:`Registration Successfully Please verify your account http://localhost:3000/auth/verifyemails?token=${jwt}`,
         };
     }
     catch(error)
@@ -83,18 +99,20 @@ async login(loginuserdto:loginDto):Promise<any>
 }
 
 
-async verifyAccount(param):Promise<{message:string}>
+async verifyAccount(query):Promise<{message:string}>
 {
-    const {token}=param;
+    
+    const {token}=query;
 
     try{
 
+        if(!token) throw new UnauthorizedException("Token Required")
+
         const checkToken=await this.validateToken(token)
 
-
-        const user=await this.userRepository.findOne({where:{id:checkToken.email}});
+        const user=await this.userRepository.findOne({where:{id:checkToken.id}});
        
-        if (!user) throw new BadRequestException('User not found');
+        if (!user) throw new NotFoundException('User not found');
         
         if(user.isVerified) throw new BadRequestException('You are already Verified');
 
@@ -121,8 +139,12 @@ async resedEmail(email:string):Promise<{message:string}>
     try{
     const checkEmail =await this.userRepository.findOne({where:{email:email,isVerified: false}})
 
-    if(!checkEmail) throw new BadRequestException(`${!checkEmail?"User not found":"Your are already verified"}`);
+    // if(!checkEmail) throw new BadRequestException(`${!checkEmail?"User not found":"Your are already verified"}`);
 
+    if (!checkEmail) throw new NotFoundException('User not found.');
+      
+    if (checkEmail.isVerified) throw new BadRequestException('You are already verified.');
+      
     const reGenerateJwt=this.generateTempToken({id:checkEmail.id,type:"temporary",expiresIn:'5m'})
 
     return{message:`A link has been sent to your email account http://localhost:3000/auth/verifyresendpassword/${reGenerateJwt}`}
@@ -140,7 +162,7 @@ async resentPasswordRequest(email:string):Promise<{message:string}>
 
         const checkEmail=await this.userRepository.findOne({where:{email:email}})
 
-        if(!checkEmail) throw new BadRequestException("Email not found")
+        if(!checkEmail) throw new NotFoundException("Email not found")
 
         const generateJwt=this.generateTempToken({id:checkEmail.id,type:"temporary",expiresIn:'5m'}) 
 
@@ -165,7 +187,7 @@ async verifyResetEmail(param,body:restPasswordDto):Promise<{message:string}>
 
         const checkToken=await this.validateToken(token)
 
-        if(!checkToken) throw new BadRequestException('Invalid token');
+        if(!checkToken) throw new UnauthorizedException('Invalid token');
 
         if (checkToken.exp && checkToken.exp < Date.now() / 1000)  throw new BadRequestException('Verification token has expired. Please request a new verification email.');
               
@@ -204,6 +226,9 @@ async verifyResetEmail(param,body:restPasswordDto):Promise<{message:string}>
   validateToken(token: string) {
     try{
 
+        console.log("0000000000000000000000000000",token)
+        console.log("1111111111111111111111111", process.env.JWT_SECRET)
+
     return this.jwtService.verify(token, {
         secret : process.env.JWT_SECRET_KEY
     });
@@ -212,5 +237,82 @@ async verifyResetEmail(param,body:restPasswordDto):Promise<{message:string}>
     }
 }
 
+    googleLogin(req:Request)
+    {
+    if(!req.user)
+    {
+        return "No user from google"
+    }
 
+    console.log(req.user)
+    return {message:"User Info from Google",user:req.user,data:req.body}
+    }
+
+  
+    async verifyAccessToken(accessToken: string): Promise<boolean> {
+
+        console.log("--------------------------")
+        
+        console.log(accessToken,process.env.CLIENT_ID)
+
+        console.log("---------------------------")
+      
+        try {
+          const ticket = await this.client.verifyIdToken({
+            idToken: accessToken,
+            audience: process.env.CLIENT_ID, // Specify the CLIENT_ID of the app that accesses the API
+          });
+
+          console.log("--------------ticket is",ticket)
+          
+          const payload = ticket.getPayload();
+          
+          console.log("Payload is ",payload)
+          // You can further check if the payload contains the necessary information
+          if (payload) {
+            return true; // Token is valid
+          }
+          
+          return false; // Token is invalid
+        } catch (error) {
+          console.error('Error verifying access token:', error);
+          return false; // Token is invalid
+        }
+      }
+
+
+      async validateUser(profile: any) {
+        const { email } = profile;
+       
+        // Here, you can check if the user exists in your database and create if not
+        let user = await this.getUserByEmail(email);
+        
+        if (!user) {
+          // Optionally create a new user if not found
+          user = await this.register(profile)
+
+            return user
+        }
+        else{
+   
+                
+        if (!user.isVerified) throw new UnauthorizedException('Please verify your email before logging in.');
+        
+
+        const generateJwt=this.generateToken({username:user.userName,email:user.email,role:user.role,expiresIn:'1h'})
+        
+        return {
+            message:"You are logged In",
+            token:generateJwt
+        }
+        }
+    
+        
+      }
+
+      async getUserByEmail(email:string): Promise<any>
+      {
+          return await this.userRepository.findOne({where:{email:email}})
+      }
+  
 }

@@ -1,4 +1,4 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, ConflictException } from '@nestjs/common';
 import { userServices } from 'src/modules/user/user.service';
 
 
@@ -13,7 +13,7 @@ export class UniqueUserGuard implements CanActivate {
         const userExists = await this.userservice.findOneByUserNameOrEmail(userName, email);
         
         if (userExists) {
-            throw new ForbiddenException(`${userExists.userName===userName?"Username":"Email"} already Exist`);
+            throw new ConflictException(`${userExists.userName===userName?"Username":"Email"} already Exist`);
         }
 
         return true;

@@ -10,6 +10,8 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { User } from "../user/entities/user.entity";
 import { AuthGuard } from "./guards/auth.guard";
 import { RolesGuard } from "./guards/role.guard";
+import { GoogleStrategy } from "./strategies/google.strategy";
+import { UniqueUserGuard } from "./guards/signup.guard";
 
 @Module({
     imports: [
@@ -20,7 +22,7 @@ import { RolesGuard } from "./guards/role.guard";
       TypeOrmModule.forFeature([User]),
     ],
     controllers:[authController],
-    providers: [AuthService,JwtStrategy,userServices,AuthGuard],
+    providers: [AuthService,JwtStrategy,userServices,AuthGuard,GoogleStrategy,UniqueUserGuard],
     exports: [AuthService], 
   })
   export class AuthModule {}
